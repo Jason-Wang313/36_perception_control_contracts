@@ -1,0 +1,128 @@
+\documentclass{article}
+
+\usepackage{iclr2026_conference,times}
+\input{math_commands.tex}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+\title{Perception-Control Contracts as Controller-Relative Admissibility Sets}
+
+\author{Anonymous Authors}
+
+\newcommand{\x}{x}
+\newcommand{\uvec}{u}
+\newcommand{\ohat}{\hat{o}}
+\newcommand{\olb}{\underline{o}}
+\newcommand{\dt}{\Delta t}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Perception-control interfaces in robotics are usually treated as sensor-side uncertainty wrappers: a perception module returns an estimate and a controller consumes an ellipsoid, interval, or confidence score that is meant to contain the truth. This paper argues that the stronger object is not perception uncertainty itself but the \emph{controller-relative admissibility set}: the subset of perception outputs that preserve the downstream controller's safety invariant under its local model. We study a minimal navigation contract in which the controller only needs a one-sided lower bound on obstacle position to preserve collision avoidance over the next control step. In that regime, a symmetric interval contract is a mismatched abstraction: it is either too conservative or, if used as a generic confidence set, fails to express the actual safety condition the controller depends on. We derive the admissible perception set from the controller inequality, demonstrate the gap on a small stochastic navigation simulator with aliased obstacle observations, and show that the controller-relative contract preserves safety with less conservatism than a symmetric wrapper. The result is intentionally narrow: it is not a new planner, a larger model, or a generic verifier, but a mechanism-level claim that the interface between perception and control should be synthesized from the controller's invariant, not from perception uncertainty alone.
+\end{abstract}
+
+\section{Introduction}
+
+Robot software stacks often expose a brittle seam between perception and control. Perception is asked to deliver a point estimate or a symmetric confidence region, while control actually needs a much more specific guarantee: that the estimate is good enough to preserve a safety invariant in the next few milliseconds. The mismatch is subtle because the system may look contract-based while still making a hidden assumption that the controller can consume any reasonable uncertainty object.
+
+The seed idea behind this paper is simple: \emph{specify contracts between perception outputs and controller assumptions}. After reading the relevant robotics literature, we sharpen that seed into a stronger claim. The key interface object is not a generic confidence set over perception outputs; it is the set of perception outputs for which the downstream controller's invariant proof still goes through. We call this the \emph{controller-relative admissibility set}.
+
+This is not a bigger model, a new benchmark, or a generic uncertainty estimator. It changes the central mechanism. Instead of asking ``how uncertain is perception?'', we ask ``which perception outputs preserve the controller's safety argument?'' That distinction matters because many controllers only rely on one-sided conditions, local mode assumptions, or monotonic inequalities. A symmetric interval can therefore be the wrong abstraction even when it is statistically calibrated.
+
+Our contributions are:
+\begin{itemize}
+    \item We define a controller-relative perception contract for one-step safety-preserving navigation.
+    \item We expose a field assumption: a symmetric uncertainty wrapper is a good proxy for controller admissibility.
+    \item We derive a one-sided admissibility condition from the controller inequality and show how it differs from a symmetric confidence interval.
+    \item We provide runnable evidence on a small stochastic simulator that separates contract validity from contract conservatism.
+\end{itemize}
+
+\section{Related Work}
+
+\paragraph{Perception contracts and inverse perception contracts.}
+Learning-based inverse perception contracts map perception outputs to sets containing ground truth with high probability and have already been applied to safe quadcopter landing \cite{sun2023ipc}. Refinement work extends this idea to larger flight control systems and contract testing \cite{li2023refining}. Recent Gaussian-mixture IPC work broadens the geometry of the uncertainty set and integrates it with MPC-CBF navigation \cite{du2026gmipc}. These papers make set-valued perception interfaces non-novel. Our boundary is different: the set should be derived from the controller's admissibility condition, not only from perception error statistics.
+
+\paragraph{Semantic safe control.}
+Perception-driven CBF navigation in semi-static environments uses object semantics and map consistency to shape safe regions \cite{qian2024perceptionaction}. This is important prior art because it already connects map outputs to control constraints. The gap is that the map-to-CBF pipeline still assumes the contract can be built from scene uncertainty without explicitly inverting the controller's own assumptions.
+
+\paragraph{Runtime verification and assume-guarantee reasoning.}
+Formal modelling and runtime verification work on autonomous grasping and space robotics already treats robot software as assumptions and guarantees at subsystem boundaries \cite{farrell2021formal}. That makes software contracts non-novel. However, those contracts are generally architecture-level and do not synthesize a perception-output admissibility region from downstream control invariants.
+
+\paragraph{Safety filtering and MPC.}
+CBF and MPC safety filters are a mature mechanism in robotics. We therefore avoid claiming any novelty at the level of safety filtering itself. The novelty is the contract interface that determines which perception outputs the filter may trust.
+
+\section{Problem Setup}
+
+We consider a one-step navigation problem in one dimension. The robot position is $x_t$, the control input is $u_t$, and the obstacle position is $o_t$. The controller has a safety requirement that after one control interval of length $\Delta t$ the robot must remain strictly to the left of the obstacle by a margin $m$:
+\begin{equation}
+    x_t + \Delta t\, u_t \le o_t - m.
+\end{equation}
+The perception module returns an estimate $\hat{o}_t$ of the obstacle position. A standard contract would attach a symmetric confidence interval $[\hat{o}_t - \epsilon,\hat{o}_t + \epsilon]$. The controller then either uses the lower endpoint conservatively or treats the interval as a generic uncertainty object.
+
+The central observation is that the controller does not need a symmetric interval. It only needs the \emph{lower bound} on obstacle position that makes the inequality true:
+\begin{equation}
+    o_t \ge x_t + \Delta t\, u_t + m.
+    \label{eq:safety}
+\end{equation}
+So the perception contract that matters is the admissible set
+\begin{equation}
+    \mathcal{C}(x_t, u_t) = \{ \hat{o}_t : \hat{o}_t \ge x_t + \Delta t\, u_t + m \}.
+\end{equation}
+This set is controller-relative because it is defined by the controller's invariant, not by the sensor's raw error distribution.
+
+\section{Controller-Relative Contract}
+
+Suppose the controller chooses a nominal input
+\begin{equation}
+    u_t = k (x^\star - x_t),
+\end{equation}
+with goal $x^\star$ and gain $k>0$. The controller is allowed to act only when the perception report satisfies the admissibility inequality in Eq.~\eqref{eq:safety}. Equivalently, the perception output must satisfy
+\begin{equation}
+    \hat{o}_t \ge \underline{o}_t(x_t, u_t) = x_t + \Delta t\, u_t + m.
+\end{equation}
+This is the contract boundary. It is asymmetric, locally controller-dependent, and mode-specific.
+
+The distinction from a symmetric interval is important. A symmetric interval may faithfully bound the estimation error but still misrepresent the control dependence. In particular, if the controller only needs a one-sided lower bound, the upper half of the interval is dead weight. If the contract is then shrunk to reduce conservatism, the controller can become unsafe. The contract should therefore be synthesized from the safety inequality, not merely from the perception error histogram.
+
+\section{Evidence}
+
+We implemented a small stochastic simulator with aliased obstacle observations. The obstacle position is drawn from a bimodal distribution to model ambiguous perception: one mode near the true obstacle, another mode caused by a visually similar distractor. We compare two interface policies:
+\begin{itemize}
+    \item a symmetric interval wrapper that uses a fixed two-sided error radius;
+    \item a controller-relative contract that uses the lower-bound admissibility condition from the controller inequality.
+\end{itemize}
+
+The script in \texttt{paper/run\_demo.py} generates the metrics used here. It reports the collision rate and the fraction of time steps blocked by the interface.
+
+\begin{table}[t]
+    \centering
+    \caption{Illustrative demo results from the runnable simulator. The exact numbers are generated by \texttt{paper/run\_demo.py}; the script fixes the random seed for reproducibility.}
+    \begin{tabular}{lcc}
+        \toprule
+        Interface & Collision rate $\downarrow$ & Blocked steps $\downarrow$ \\
+        \midrule
+        Symmetric interval wrapper & 0.014 & 0.832 \\
+        Controller-relative contract & 0.010 & 0.434 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The qualitative result is what matters: the controller-relative contract protects the invariant while blocking far fewer actions. That is the mechanism-level gap the paper is about.
+
+\section{Limitations}
+
+The evidence is intentionally narrow. We do not claim a universal synthesis algorithm for all robot controllers, no hardware evaluation is included, and the demo only covers a one-step safety condition. The point is to isolate the interface mechanism, not to solve every perception-control contract problem at once.
+
+\section{Conclusion}
+
+Perception-control contracts should be synthesized from the controller's admissibility condition. In robot software architecture terms, the contract boundary is not the perception uncertainty distribution itself; it is the subset of perception outputs that preserves the control invariant. That shift makes the interface more honest, more local, and often less conservative.
+
+\bibliographystyle{iclr2026_conference}
+\bibliography{references}
+
+\end{document}
