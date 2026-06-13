@@ -23,8 +23,14 @@
 \maketitle
 
 \begin{abstract}
-Perception-control interfaces in robotics are usually treated as sensor-side uncertainty wrappers: a perception module returns an estimate and a controller consumes an ellipsoid, interval, or confidence score that is meant to contain the truth. This paper argues that the stronger object is not perception uncertainty itself but the \emph{controller-relative admissibility set}: the subset of perception outputs that preserve the downstream controller's safety invariant under its local model. We study a minimal navigation contract in which the controller only needs a one-sided lower bound on obstacle position to preserve collision avoidance over the next control step. In that regime, a symmetric interval contract is a mismatched abstraction: it is either too conservative or, if used as a generic confidence set, fails to express the actual safety condition the controller depends on. We derive the admissible perception set from the controller inequality, demonstrate the gap on a small stochastic navigation simulator with aliased obstacle observations, and show that the controller-relative contract preserves safety with less conservatism than a symmetric wrapper. The result is intentionally narrow: it is not a new planner, a larger model, or a generic verifier, but a mechanism-level claim that the interface between perception and control should be synthesized from the controller's invariant, not from perception uncertainty alone.
+Perception-control interfaces in robotics are usually treated as sensor-side uncertainty wrappers: a perception module returns an estimate and a controller consumes an ellipsoid, interval, or confidence score that is meant to contain the truth. This paper argues that the stronger object is not perception uncertainty itself but the \emph{controller-relative admissibility set}: the subset of perception outputs that preserve the downstream controller's safety invariant under its local model. We study a minimal navigation contract in which the controller only needs a one-sided lower bound on obstacle position to preserve collision avoidance over the next control step. In that regime, a symmetric interval contract is a mismatched abstraction: it is either too conservative or, if used as a generic confidence set, fails to express the actual safety condition the controller depends on. We derive the admissible perception set from the controller inequality, demonstrate the gap on a small stochastic navigation simulator with aliased obstacle observations, and show that the controller-relative contract preserves safety with less conservatism than a symmetric wrapper when the perception mode is reliable. A v2 mode-corruption stress shows the boundary: under corrupted mode labels, the same controller-relative contract can become less safe than the symmetric wrapper. The result is intentionally narrow: it is not a new planner, a larger model, or a generic verifier, but a mechanism-level claim that the interface between perception and control should be synthesized from the controller's invariant, not from perception uncertainty alone.
 \end{abstract}
+
+\paragraph{V2 hardening note.}
+Submission-hardening version: v2. This version narrows the claim.
+Controller-relative contracts depend on reliable mode semantics and calibrated
+local assumptions. They are not universally safer than conservative symmetric
+wrappers.
 
 \section{Introduction}
 
@@ -114,9 +120,22 @@ The script in \texttt{paper/run\_demo.py} generates the metrics used here. It re
 
 The qualitative result is what matters: the controller-relative contract protects the invariant while blocking far fewer actions. That is the mechanism-level gap the paper is about.
 
+\subsection{V2 mode-corruption stress}
+
+The hostile reviewer attack is that the demo gives the contract a reliable
+mode label for aliased perception. We therefore corrupt the mode label while
+leaving the symmetric wrapper unchanged. Table~\ref{tab:mode-corruption} shows
+that at 20\% mode error, the controller-relative collision rate rises to 0.020,
+worse than the symmetric wrapper's 0.014, while still blocking fewer steps. At
+40\% mode error, relative-contract collisions rise to 0.029. The supported
+claim is therefore mode-calibrated controller-relative admissibility, not a
+universal dominance claim.
+
+\input{../docs/mode_corruption_stress_table.tex}
+
 \section{Limitations}
 
-The evidence is intentionally narrow. We do not claim a universal synthesis algorithm for all robot controllers, no hardware evaluation is included, and the demo only covers a one-step safety condition. The point is to isolate the interface mechanism, not to solve every perception-control contract problem at once.
+The evidence is intentionally narrow. We do not claim a universal synthesis algorithm for all robot controllers, no hardware evaluation is included, and the demo only covers a one-step safety condition. The v2 stress shows that unreliable mode semantics can make the controller-relative contract less safe than a conservative symmetric wrapper. The point is to isolate the interface mechanism, not to solve every perception-control contract problem at once.
 
 \section{Conclusion}
 

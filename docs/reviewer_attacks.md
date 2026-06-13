@@ -30,3 +30,8 @@ The contract is too abstract to be useful.
 
 - Response: usefulness depends on the downstream invariant; the paper provides an executable toy demonstration and a clear recipe for instantiation.
 
+## Likely attack 6
+
+The result depends on giving the controller-relative contract a reliable mode label.
+
+- Response: accepted. The v2 stress corrupts the mode label and shows the boundary directly. At 20% mode error, the relative contract has collision rate 0.020 versus 0.014 for the symmetric wrapper; at 40% mode error it rises to 0.029. The paper therefore claims calibrated controller-relative admissibility, not universal dominance.
