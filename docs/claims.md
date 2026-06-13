@@ -13,6 +13,7 @@
 - Claim 2: conceptual contribution, supported by mechanism derivation
 - Claim 3: supported by hostile-prior analysis and synthetic demonstration
 - Claim 4: supported only in the demo setting; not claimed as universal
+- V2 boundary: under 20% mode-label error, the controller-relative collision rate rises to 0.020, exceeding the symmetric wrapper's 0.014. The claim requires reliable mode semantics.
 
 ## Unsupported claims not made
 
@@ -20,4 +21,4 @@
 - Full formal soundness for all robot controllers
 - Hardware validation
 - A general solution to perception uncertainty
-
+- Universal safety dominance under corrupted mode labels

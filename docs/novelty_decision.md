@@ -22,3 +22,6 @@ Given a controller safety condition, derive the admissible set of perception out
 - Better perception calibration
 - New benchmark only
 
+## V2 hardening boundary
+
+The paper remains a narrow mechanism paper. It is not a general safe-perception theorem. The v2 mode-corruption stress deliberately weakens the claim: at 20% mode-label error, the controller-relative contract's collision rate rises to 0.020, worse than the symmetric wrapper's 0.014. The honest novelty boundary is controller-relative synthesis under reliable local mode semantics.

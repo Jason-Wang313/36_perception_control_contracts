@@ -46,3 +46,8 @@ The best thesis is A plus D:
 - synthesize the contract from controller invariants
 - show that a generic perception uncertainty wrapper can fail or become too conservative
 
+## V2 boundary
+
+Inside the claim: controller-relative admissibility can be less conservative than a symmetric wrapper when the controller mode semantics are reliable.
+
+Outside the claim: universal safety dominance under corrupted or adversarial mode labels. The mode-corruption stress shows this boundary: at 20% mode error, relative-contract collisions are 0.020 versus 0.014 for the symmetric wrapper.
