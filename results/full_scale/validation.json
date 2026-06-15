@@ -1,0 +1,28 @@
+{
+  "status": "complete",
+  "paper": 36,
+  "version": "v3_final_full_scale",
+  "validated_at": "2026-06-15T00:00:00+01:00",
+  "downloads_pdf": "C:/Users/wangz/Downloads/36.pdf",
+  "pages": 25,
+  "sha256": "73AFE97FDFD6D1B598646BA6413F1AD6699F8FBED5FE276C9308D12EE60626DF",
+  "local_paper_pdf_absent_after_build": true,
+  "canonical_build_complete": true,
+  "build_logs_clean_for_failure_strings": true,
+  "text_markers_present": [
+    "v3 final full-scale",
+    "5,109,350,400",
+    "161,280",
+    "80.42",
+    "overconfident",
+    "oracle"
+  ],
+  "visual_render_checked": true,
+  "experiment_validation": {
+    "seed_rows": 161280,
+    "aggregate_rows": 1680,
+    "represented_admissibility_checks": 5109350400,
+    "figures": 5,
+    "tables": 6
+  }
+}

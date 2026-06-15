@@ -1,24 +1,30 @@
 # Claims
 
-## Main claims
+## Main Claims
 
-1. A fixed controller-agnostic perception uncertainty set is often too coarse for downstream safety.
-2. A perception contract should be defined by the downstream controller's invariant, mode, and sensitivity.
-3. Under multi-modal or aliased perception error, a single ellipsoid can be both over-conservative and structurally mismatched.
-4. A controller-relative contract can preserve safety with less conservatism than a generic uncertainty wrapper.
+1. A controller-agnostic perception uncertainty set is often the wrong boundary object for robot safety.
+2. A perception-control contract should be the set of perception outputs under which the downstream controller's local invariant remains admissible.
+3. Controller-relative contracts can reduce blocking relative to generic symmetric wrappers when mode semantics and calibration signals are reliable.
+4. Overconfident controller-relative contracts are unsafe: using the right contract geometry without adequate calibration can increase collisions.
+5. Robust, risk-budgeted, adaptive, and residual-calibrated controller-relative variants expose the safety-conservatism tradeoff more directly than generic wrappers.
 
-## Support status
+## V3 Evidence
 
-- Claim 1: supported by literature comparison and synthetic evidence
-- Claim 2: conceptual contribution, supported by mechanism derivation
-- Claim 3: supported by hostile-prior analysis and synthetic demonstration
-- Claim 4: supported only in the demo setting; not claimed as universal
-- V2 boundary: under 20% mode-label error, the controller-relative collision rate rises to 0.020, exceeding the symmetric wrapper's 0.014. The claim requires reliable mode semantics.
+- Full-scale suite: 10 task families, 12 regimes, 14 interfaces, 96 seeds per cell, 160 represented steps, 33 hypotheses, and 6-step lookahead.
+- Represented admissibility checks: 5,109,350,400.
+- Seed-level rows: 161,280.
+- Aggregate rows: 1,680.
+- Point-estimate controller: 93.95 collisions per seed.
+- Overconfident controller-relative contract: 80.42 collisions per seed.
+- Symmetric interval wrapper: 14.76 collisions per seed, 0.80 blocked fraction.
+- Adaptive mode-calibrated contract: 7.25 collisions per seed, 0.52 blocked fraction.
+- Robust one-sided contract: 4.77 collisions per seed, 0.70 blocked fraction.
+- Oracle admissibility contract: 0.66 collisions per seed, 0.36 blocked fraction.
 
-## Unsupported claims not made
+## Boundaries
 
-- Universal optimality
-- Full formal soundness for all robot controllers
-- Hardware validation
-- A general solution to perception uncertainty
-- Universal safety dominance under corrupted mode labels
+- The paper does not claim hardware safety.
+- The paper does not train or validate a learned vision model.
+- The paper does not prove a universal synthesis theorem for arbitrary controllers.
+- The paper does not claim controller-relative contracts universally dominate symmetric wrappers.
+- Mode calibration is required; the v2 and v3 stress tests intentionally keep that failure boundary visible.

@@ -1,37 +1,25 @@
 # Reviewer Attacks
 
-## Likely attack 1
+## Attack 1: This is just another uncertainty wrapper.
 
-This is just another uncertainty estimate wrapped around a controller.
+Response: the contract is synthesized from the controller invariant. A generic wrapper asks where the true perception target might be; the controller-relative contract asks which perception outputs preserve the controller's admissibility condition.
 
-- Response: the contract is synthesized from the controller invariant, not from sensor error alone.
+## Attack 2: Existing inverse perception contracts already cover this.
 
-## Likely attack 2
+Response: inverse perception contracts are important prior work, but their usual synthesis target is a perception/state containment set. This paper changes the synthesis target to the downstream controller's admissible perception region.
 
-Single-case simulation is too weak.
+## Attack 3: Symmetric wrappers are safer.
 
-- Response: the paper explicitly frames the result as a mechanism paper and marks the evidence as a pilot.
+Response: sometimes yes. The paper keeps that boundary visible. Symmetric wrappers reduce collisions by blocking heavily: 14.76 collisions per seed with 0.80 blocked fraction. The claim is not universal dominance; it is that controller-relative contracts expose the relevant safety-conservatism tradeoff.
 
-## Likely attack 3
+## Attack 4: Mode corruption breaks the method.
 
-Existing inverse perception contracts already do this.
+Response: fixed and overconfident variants can break. That is why v3 includes mode corruption, semantic false negatives, combined shift, adaptive mode calibration, robust one-sided contracts, and an overconfident negative control.
 
-- Response: existing IPC work usually maps perception error to a set; this paper changes the synthesis target to the controller's admissible perception region and emphasizes mode-relative assumptions.
+## Attack 5: The experiment is still analytic.
 
-## Likely attack 4
+Response: accepted. The v3 suite is a deterministic interface study, not a hardware or learned-vision benchmark. The manuscript explicitly lays out high-fidelity simulation and hardware transition protocols as future work.
 
-Why not just use a verifier?
+## Attack 6: The result is just CBF or MPC filtering.
 
-- Response: verification checks a fixed model; the central problem here is that the model/interface itself is wrong if the controller assumption is not encoded in the perception contract.
-
-## Likely attack 5
-
-The contract is too abstract to be useful.
-
-- Response: usefulness depends on the downstream invariant; the paper provides an executable toy demonstration and a clear recipe for instantiation.
-
-## Likely attack 6
-
-The result depends on giving the controller-relative contract a reliable mode label.
-
-- Response: accepted. The v2 stress corrupts the mode label and shows the boundary directly. At 20% mode error, the relative contract has collision rate 0.020 versus 0.014 for the symmetric wrapper; at 40% mode error it rises to 0.029. The paper therefore claims calibrated controller-relative admissibility, not universal dominance.
+Response: CBF and MPC filters still need a perception object. The paper asks what that object should be and includes CBF/MPC generic-uncertainty baselines to separate filtering from interface synthesis.

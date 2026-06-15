@@ -2,17 +2,23 @@
 
 ## Short Response
 
-The paper is intentionally narrow. It does not claim a universal perception-safety theorem. It claims that a perception-control contract can be synthesized from a controller admissibility condition and that this changes the interface relative to controller-agnostic uncertainty wrappers.
+The paper does not claim that perception contracts, CBF filters, MPC filters, conformal prediction, or semantic safety are new in isolation. The claim is narrower: the perception-control boundary object should be the set of perception outputs under which the downstream controller's local invariant remains admissible.
 
 ## Strongest Objection
 
-The controller-relative contract relies on the aliased perception mode being reliable. If the mode label is wrong, the contract may authorize actions that a symmetric wrapper would block.
+Controller-relative contracts may become unsafe when mode semantics, calibration, delay, or semantic labels are unreliable.
 
 ## Response
 
-Accepted and now tested. The v2 mode-corruption stress shows that at 20% mode-label error the controller-relative collision rate is 0.020, worse than the symmetric wrapper's 0.014, while blocked steps remain lower at 0.504 versus 0.832. The manuscript now states this as a limitation and treats reliable mode semantics as a precondition.
+Accepted and tested. The v2 mode-corruption stress exposed the hidden reliable-mode assumption. The v3 suite expands this boundary across 12 regimes and includes an overconfident controller-relative contract as an explicit negative control. That negative control averages 80.42 collisions per seed, compared with 14.76 for the symmetric interval wrapper, 7.25 for adaptive mode calibration, 4.77 for robust one-sided contracts, and 0.66 for the oracle.
 
 ## Revised Claim
 
-Controller-relative admissibility can reduce conservatism while preserving safety in the toy simulator when the controller mode semantics are reliable. It is not a universal replacement for conservative uncertainty wrappers.
+Controller-relative admissibility is the right interface geometry when the controller invariant is known and calibration signals are healthy. The geometry must be paired with residual, mode, semantic, delay, and drift calibration, plus fallback to conservative wrappers or blocking when those signals fail.
 
+## What Remains Out Of Scope
+
+- Hardware validation.
+- Learned perception model training.
+- A universal theorem for arbitrary controllers.
+- A claim that controller-relative contracts always beat symmetric wrappers.

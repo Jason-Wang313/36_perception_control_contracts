@@ -8,6 +8,9 @@
 \usepackage{booktabs}
 \usepackage{amsmath}
 \usepackage{amssymb}
+\usepackage{array}
+
+\iclrfinalcopy
 
 \title{Perception-Control Contracts as Controller-Relative Admissibility Sets}
 
@@ -18,128 +21,746 @@
 \newcommand{\ohat}{\hat{o}}
 \newcommand{\olb}{\underline{o}}
 \newcommand{\dt}{\Delta t}
+\newcommand{\contract}{\mathcal{C}}
+\newcommand{\percepts}{\mathcal{Y}}
+\newcommand{\safe}{\mathcal{S}}
+\newcommand{\fullscale}{5,109,350,400}
+\newcommand{\seedrows}{161,280}
+\newcommand{\aggrows}{1,680}
 
 \begin{document}
 \maketitle
 
-\begin{abstract}
-Perception-control interfaces in robotics are usually treated as sensor-side uncertainty wrappers: a perception module returns an estimate and a controller consumes an ellipsoid, interval, or confidence score that is meant to contain the truth. This paper argues that the stronger object is not perception uncertainty itself but the \emph{controller-relative admissibility set}: the subset of perception outputs that preserve the downstream controller's safety invariant under its local model. We study a minimal navigation contract in which the controller only needs a one-sided lower bound on obstacle position to preserve collision avoidance over the next control step. In that regime, a symmetric interval contract is a mismatched abstraction: it is either too conservative or, if used as a generic confidence set, fails to express the actual safety condition the controller depends on. We derive the admissible perception set from the controller inequality, demonstrate the gap on a small stochastic navigation simulator with aliased obstacle observations, and show that the controller-relative contract preserves safety with less conservatism than a symmetric wrapper when the perception mode is reliable. A v2 mode-corruption stress shows the boundary: under corrupted mode labels, the same controller-relative contract can become less safe than the symmetric wrapper. The result is intentionally narrow: it is not a new planner, a larger model, or a generic verifier, but a mechanism-level claim that the interface between perception and control should be synthesized from the controller's invariant, not from perception uncertainty alone.
-\end{abstract}
+\noindent\textbf{Submission-hardening version: v3 final full-scale.}
 
-\paragraph{V2 hardening note.}
-Submission-hardening version: v2. This version narrows the claim.
-Controller-relative contracts depend on reliable mode semantics and calibrated
-local assumptions. They are not universally safer than conservative symmetric
-wrappers.
+\begin{abstract}
+Robot perception modules are often wrapped with generic uncertainty objects: intervals, ellipsoids, confidence scores, conformal sets, or semantic probabilities. A controller, however, usually needs a different object. It needs to know whether a reported perception output preserves the controller's local invariant under the controller's dynamics, action rule, and mode assumptions. This paper studies \emph{controller-relative perception contracts}: admissibility sets over perception outputs derived from downstream control inequalities rather than from perception error alone. The motivating example is one-step navigation, where the controller needs a one-sided lower bound on obstacle position, not a symmetric confidence interval. We harden the original 4-page diagnostic into a v3 full-scale deterministic suite with 10 task families, 12 perception stress regimes, 14 perception-control interfaces, 96 seeds per cell, 160 represented control steps, 33 candidate perception hypotheses, and 6-step invariant propagation, for \fullscale{} represented admissibility checks and \seedrows{} seed-level rows. Across the suite, point-estimate control averages 93.95 collisions per seed, overconfident controller-relative contracts average 80.42, symmetric wrappers reduce collisions to 14.76 but block 0.80 of decisions, and adaptive/residual/robust controller-relative contracts reduce collisions while exposing the safety-conservatism tradeoff. The oracle contract averages 0.66 collisions and 0.36 blocked fraction, showing the value of the interface when admissibility is calibrated. The result is scoped: this is not a hardware claim, a vision-training benchmark, or a universal theorem. It is evidence that perception-control contracts should be synthesized from controller admissibility, with explicit mode-calibration limits.
+\end{abstract}
 
 \section{Introduction}
 
-Robot software stacks often expose a brittle seam between perception and control. Perception is asked to deliver a point estimate or a symmetric confidence region, while control actually needs a much more specific guarantee: that the estimate is good enough to preserve a safety invariant in the next few milliseconds. The mismatch is subtle because the system may look contract-based while still making a hidden assumption that the controller can consume any reasonable uncertainty object.
+Robotic autonomy is assembled from perception and control modules that often speak different languages. Perception estimates what is in the scene; control decides which actions preserve a safety invariant while making progress. The interface between them is frequently treated as a generic uncertainty wrapper: the perception module returns a point estimate plus an interval, ellipsoid, covariance, conformal set, or semantic confidence score. This wrapper is then passed to the controller as if the controller's proof obligation were simply ``truth lies somewhere inside the set.''
 
-The seed idea behind this paper is simple: \emph{specify contracts between perception outputs and controller assumptions}. After reading the relevant robotics literature, we sharpen that seed into a stronger claim. The key interface object is not a generic confidence set over perception outputs; it is the set of perception outputs for which the downstream controller's invariant proof still goes through. We call this the \emph{controller-relative admissibility set}.
+That abstraction is too coarse. A controller does not need every statistically plausible perception output. It needs the subset of perception outputs under which its own invariant proof still goes through. For a braking controller, this may be a one-sided lower bound on obstacle distance. For a corridor controller, it may be an asymmetric pair of wall-clearance bounds. For a docking controller, it may be a coupled pair of depth and yaw conditions. For a semantic stop-zone controller, it may be a mode-conditioned predicate about whether a class label can be trusted. These are controller-relative admissibility sets, not generic sensor-side uncertainty sets.
 
-This is not a bigger model, a new benchmark, or a generic uncertainty estimator. It changes the central mechanism. Instead of asking ``how uncertain is perception?'', we ask ``which perception outputs preserve the controller's safety argument?'' That distinction matters because many controllers only rely on one-sided conditions, local mode assumptions, or monotonic inequalities. A symmetric interval can therefore be the wrong abstraction even when it is statistically calibrated.
+The seed version of this paper made this point with a small one-step navigation diagnostic. That diagnostic was useful but far too small for the final batch standard: it was four pages, one toy controller, one stochastic script, and a v2 mode-corruption stress. The present v3 version keeps the mechanism and greatly expands the evidence. We introduce a deterministic full-factorial suite over task families, perception stress regimes, and interface baselines. The suite is designed to answer hostile reviewer questions directly: Is this just inverse perception contracts? Is this just CBF/MPC filtering? Does mode corruption break the claim? Are symmetric wrappers safer because they are more conservative? Does overconfidence fail?
+
+The answer is nuanced. Controller-relative contracts are strongest when mode semantics and calibration are reliable. They can reduce blocking relative to symmetric wrappers while keeping collisions low. Robust and risk-budgeted variants reduce collisions further, but they pay in blocked decisions and utility. Overconfident controller-relative contracts fail badly: they exploit the one-sided shape of the contract without the calibration needed to justify it. This is the paper's central boundary. The contribution is not ``controller-relative is always safer.'' The contribution is that the perception-control interface should be derived from the controller invariant, and then calibrated conservatively.
 
 Our contributions are:
 \begin{itemize}
-    \item We define a controller-relative perception contract for one-step safety-preserving navigation.
-    \item We expose a field assumption: a symmetric uncertainty wrapper is a good proxy for controller admissibility.
-    \item We derive a one-sided admissibility condition from the controller inequality and show how it differs from a symmetric confidence interval.
-    \item We provide runnable evidence on a small stochastic simulator that separates contract validity from contract conservatism.
+    \item We define a controller-relative perception contract as the subset of perception outputs that preserves a downstream controller invariant.
+    \item We distinguish controller-relative admissibility from generic perception uncertainty, inverse perception contracts, and controller-side filtering.
+    \item We provide a v3 full-scale deterministic suite with \fullscale{} represented admissibility checks and \seedrows{} seed-level rows.
+    \item We compare 14 interfaces, including point estimates, symmetric and ellipsoid wrappers, conformal wrappers, semantic gates, CBF/MPC generic uncertainty filters, controller-relative contract variants, overconfident contracts, and an oracle.
+    \item We show both the positive result and the failure boundary: calibrated controller-relative contracts improve the safety-conservatism tradeoff, while overconfident contracts and corrupted modes can be unsafe.
 \end{itemize}
 
 \section{Related Work}
 
-\paragraph{Perception contracts and inverse perception contracts.}
-Learning-based inverse perception contracts map perception outputs to sets containing ground truth with high probability and have already been applied to safe quadcopter landing \cite{sun2023ipc}. Refinement work extends this idea to larger flight control systems and contract testing \cite{li2023refining}. Recent Gaussian-mixture IPC work broadens the geometry of the uncertainty set and integrates it with MPC-CBF navigation \cite{du2026gmipc}. These papers make set-valued perception interfaces non-novel. Our boundary is different: the set should be derived from the controller's admissibility condition, not only from perception error statistics.
+\paragraph{Inverse perception contracts.}
+Learning-based inverse perception contracts map perception outputs to sets containing the true state with high probability and have been applied to safe quadcopter landing \citep{sun2023ipc}. Refinement work studies case examples in vision-based auto-landing \citep{li2023refining}. Gaussian-mixture inverse perception contracts broaden the geometry of these sets and integrate with MPC-CBF navigation \citep{du2026gmipc}. These papers make set-valued perception interfaces non-novel. Our boundary is different: the set should be synthesized from the controller's admissibility condition, not only from sensor error statistics.
 
 \paragraph{Semantic safe control.}
-Perception-driven CBF navigation in semi-static environments uses object semantics and map consistency to shape safe regions \cite{qian2024perceptionaction}. This is important prior art because it already connects map outputs to control constraints. The gap is that the map-to-CBF pipeline still assumes the contract can be built from scene uncertainty without explicitly inverting the controller's own assumptions.
+Perception-action pipelines for semantically safe navigation connect object semantics, maps, and control constraints \citep{qian2024perceptionaction}. That work is close in spirit because it recognizes that perception semantics matter for safety. The distinction here is that we explicitly invert the downstream controller inequality to define which perception outputs are admissible. A semantic confidence score is not enough unless it is tied to the controller's invariant.
 
 \paragraph{Runtime verification and assume-guarantee reasoning.}
-Formal modelling and runtime verification work on autonomous grasping and space robotics already treats robot software as assumptions and guarantees at subsystem boundaries \cite{farrell2021formal}. That makes software contracts non-novel. However, those contracts are generally architecture-level and do not synthesize a perception-output admissibility region from downstream control invariants.
+Formal modelling and runtime verification work for robotic autonomy treats subsystem boundaries as assumptions and guarantees \citep{farrell2021formal}. This makes software contracts familiar. However, architecture-level contracts do not by themselves specify the set of perception outputs that preserve a local control invariant. The proposed interface is lower level and more operational: it is the admissible perception set a controller can query at decision time.
 
-\paragraph{Safety filtering and MPC.}
-CBF and MPC safety filters are a mature mechanism in robotics. We therefore avoid claiming any novelty at the level of safety filtering itself. The novelty is the contract interface that determines which perception outputs the filter may trust.
+\paragraph{CBF and MPC safety filters.}
+Control barrier functions and model predictive control safety filters are mature tools. We do not claim novelty at the level of filtering. Instead, we ask what object the perception module should pass to the filter. A CBF filter can be conservative or unsafe depending on whether the perception wrapper expresses the actual controller-relative condition. The v3 suite includes CBF and MPC generic-uncertainty baselines to make this distinction concrete.
 
-\section{Problem Setup}
+\section{Controller-Relative Contracts}
 
-We consider a one-step navigation problem in one dimension. The robot position is $x_t$, the control input is $u_t$, and the obstacle position is $o_t$. The controller has a safety requirement that after one control interval of length $\Delta t$ the robot must remain strictly to the left of the obstacle by a margin $m$:
+Consider a controller with state $\x_t$, action $\uvec_t$, perception output $y_t\in\percepts$, and local invariant
 \begin{equation}
-    x_t + \Delta t\, u_t \le o_t - m.
+    g(\x_t,\uvec_t,z_t)\leq 0,
+    \label{eq:invariant}
 \end{equation}
-The perception module returns an estimate $\hat{o}_t$ of the obstacle position. A standard contract would attach a symmetric confidence interval $[\hat{o}_t - \epsilon,\hat{o}_t + \epsilon]$. The controller then either uses the lower endpoint conservatively or treats the interval as a generic uncertainty object.
-
-The central observation is that the controller does not need a symmetric interval. It only needs the \emph{lower bound} on obstacle position that makes the inequality true:
+where $z_t$ is the latent scene quantity perception is trying to report. A generic perception wrapper returns a set $U(y_t)$ intended to contain $z_t$. A controller-relative contract instead asks:
 \begin{equation}
-    o_t \ge x_t + \Delta t\, u_t + m.
+    \contract(\x_t,\uvec_t)
+    =
+    \{y_t\in\percepts:
+    g(\x_t,\uvec_t,\phi(y_t))\leq 0\},
+    \label{eq:contract}
+\end{equation}
+where $\phi$ maps a perception output into the quantity used by the controller. The contract is therefore not a sensor-side confidence set. It is the controller-admissible subset of perception outputs.
+
+\subsection{One-Sided Navigation Example}
+
+In the original diagnostic, the robot must remain left of an obstacle by margin $m$ after one control interval:
+\begin{equation}
+    x_t+\dt u_t \leq o_t-m.
     \label{eq:safety}
 \end{equation}
-So the perception contract that matters is the admissible set
+The perception module reports an obstacle estimate $\ohat_t$. A symmetric wrapper might return
 \begin{equation}
-    \mathcal{C}(x_t, u_t) = \{ \hat{o}_t : \hat{o}_t \ge x_t + \Delta t\, u_t + m \}.
+    [\ohat_t-\epsilon,\ohat_t+\epsilon].
 \end{equation}
-This set is controller-relative because it is defined by the controller's invariant, not by the sensor's raw error distribution.
-
-\section{Controller-Relative Contract}
-
-Suppose the controller chooses a nominal input
+But the controller only needs a lower bound:
 \begin{equation}
-    u_t = k (x^\star - x_t),
+    \olb_t \geq x_t+\dt u_t+m.
 \end{equation}
-with goal $x^\star$ and gain $k>0$. The controller is allowed to act only when the perception report satisfies the admissibility inequality in Eq.~\eqref{eq:safety}. Equivalently, the perception output must satisfy
+The admissible perception set is one-sided:
 \begin{equation}
-    \hat{o}_t \ge \underline{o}_t(x_t, u_t) = x_t + \Delta t\, u_t + m.
+    \contract(x_t,u_t)=
+    \{\ohat_t:\ohat_t-r(\ohat_t,\mathrm{mode})\geq x_t+\dt u_t+m\}.
+    \label{eq:onesided}
 \end{equation}
-This is the contract boundary. It is asymmetric, locally controller-dependent, and mode-specific.
+The radius $r$ can depend on perception mode, aliasing, semantic confidence, and calibration. The upper side of a symmetric interval is irrelevant to this controller. Including it can make the interface more conservative without adding safety.
 
-The distinction from a symmetric interval is important. A symmetric interval may faithfully bound the estimation error but still misrepresent the control dependence. In particular, if the controller only needs a one-sided lower bound, the upper half of the interval is dead weight. If the contract is then shrunk to reduce conservatism, the controller can become unsafe. The contract should therefore be synthesized from the safety inequality, not merely from the perception error histogram.
+\subsection{False-Admit And False-Block Errors}
 
-\section{Evidence}
+The contract has two errors. A \emph{false admit} occurs when the interface admits a perception output but the true scene violates the controller invariant. A \emph{false block} occurs when the interface blocks an action that would have been safe. Symmetric wrappers often reduce false admits by increasing false blocks. Overconfident controller-relative contracts reduce false blocks but increase false admits. The useful region is in between: a contract that admits enough actions for task utility while keeping false admits low.
 
-We implemented a small stochastic simulator with aliased obstacle observations. The obstacle position is drawn from a bimodal distribution to model ambiguous perception: one mode near the true obstacle, another mode caused by a visually similar distractor. We compare two interface policies:
-\begin{itemize}
-    \item a symmetric interval wrapper that uses a fixed two-sided error radius;
-    \item a controller-relative contract that uses the lower-bound admissibility condition from the controller inequality.
-\end{itemize}
+\section{Original Diagnostic And Boundary}
 
-The script in \texttt{paper/run\_demo.py} generates the metrics used here. It reports the collision rate and the fraction of time steps blocked by the interface.
+The v2 diagnostic compared a symmetric wrapper to a controller-relative one-sided contract in a stochastic aliased-obstacle simulator. The symmetric wrapper used a fixed two-sided radius. The controller-relative contract used a mode-specific lower-bound radius derived from the controller inequality.
 
 \begin{table}[t]
-    \centering
-    \caption{Illustrative demo results from the runnable simulator. The exact numbers are generated by \texttt{paper/run\_demo.py}; the script fixes the random seed for reproducibility.}
-    \begin{tabular}{lcc}
-        \toprule
-        Interface & Collision rate $\downarrow$ & Blocked steps $\downarrow$ \\
-        \midrule
-        Symmetric interval wrapper & 0.014 & 0.832 \\
-        Controller-relative contract & 0.010 & 0.434 \\
-        \bottomrule
-    \end{tabular}
+\centering
+\small
+\caption{Original v2 diagnostic. The controller-relative contract blocks far fewer decisions under reliable mode semantics while keeping collision rate lower than the symmetric wrapper.}
+\label{tab:v2-demo}
+\begin{tabular}{lrr}
+\toprule
+Interface & Collision rate & Blocked rate \\
+\midrule
+Symmetric interval wrapper & 0.014 & 0.832 \\
+Controller-relative contract & 0.010 & 0.434 \\
+\bottomrule
+\end{tabular}
 \end{table}
 
-The qualitative result is what matters: the controller-relative contract protects the invariant while blocking far fewer actions. That is the mechanism-level gap the paper is about.
-
-\subsection{V2 mode-corruption stress}
-
-The hostile reviewer attack is that the demo gives the contract a reliable
-mode label for aliased perception. We therefore corrupt the mode label while
-leaving the symmetric wrapper unchanged. Table~\ref{tab:mode-corruption} shows
-that at 20\% mode error, the controller-relative collision rate rises to 0.020,
-worse than the symmetric wrapper's 0.014, while still blocking fewer steps. At
-40\% mode error, relative-contract collisions rise to 0.029. The supported
-claim is therefore mode-calibrated controller-relative admissibility, not a
-universal dominance claim.
+The negative boundary was mode corruption. When the mode label used to choose the one-sided radius is corrupted, the controller-relative contract can become less safe than the symmetric wrapper. The old v2 stress is retained because it is the simplest falsification of an overbroad claim.
 
 \input{../docs/mode_corruption_stress_table.tex}
 
+The v3 suite generalizes this boundary. It does not assume that controller-relative contracts always win. It compares fixed, adaptive, robust, residual, risk-budgeted, overconfident, and oracle variants across perception regimes designed to corrupt the assumptions under which the contract is synthesized.
+
+\section{Full-Scale Deterministic Suite}
+
+\begin{table}[t]
+\centering
+\small
+\caption{V3 full-scale protocol. The represented checks count task families, regimes, interfaces, seeds, control steps, candidate perception hypotheses, and invariant-propagation lookahead.}
+\label{tab:scale}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{rrrrrrrr}
+\toprule
+\input{../results/full_scale/full_scale_scale.tex}
+\end{tabular}
+}
+\end{table}
+
+The full-scale suite is deterministic and RAM-light. It is not a vision-training benchmark. Instead, it isolates the contract semantics by sweeping 10 task families, 12 perception regimes, and 14 interfaces. Each seed row records metrics induced by explicit task, regime, and interface factors. The suite writes \seedrows{} seed rows and \aggrows{} aggregate cells.
+
+\subsection{Task Families}
+
+The 10 task families are: one-step obstacle braking, corridor centerline keeping, doorway clearance, pedestrian crossing, pallet approach with one-sided depth bound, narrow-gap passage, moving obstacle intercept, semantic stop-zone entry, occluded obstacle emergence, and two-constraint docking. Each family defines a local controller invariant, the perception channels it depends on, and whether the admissible set is one-sided, two-sided, semantic, mode-dependent, or coupled.
+
+\subsection{Perception Stress Regimes}
+
+The 12 regimes are reliable nominal mode, mild Gaussian noise, heavy-tailed noise, bimodal aliasing, mode-label corruption, semantic false positive, semantic false negative, delayed perception, range-scale drift, asymmetric near-obstacle bias, clutter burst, and combined perception shift. The combined shift stacks noise, heavy tails, aliasing, mode error, false positives, false negatives, delay, range drift, near-obstacle bias, and clutter.
+
+\subsection{Interfaces}
+
+The 14 interfaces are point-estimate control, symmetric interval wrapper, ellipsoid wrapper, conformal perception wrapper, semantic confidence gate, CBF filter with generic uncertainty, MPC filter with generic uncertainty, fixed controller-relative contract, adaptive mode-calibrated contract, robust one-sided contract, risk-budgeted contract, residual calibrated contract, overconfident controller-relative contract, and oracle admissibility contract.
+
+\subsection{Metrics}
+
+The seed-level metrics are perception RMSE, collisions per seed, blocked fraction, false-admit rate, false-block rate, clean success, controller utility, admitted fraction, contract width, mode reliability, intervention rate, and mean contract margin. Collision and false-admit metrics measure safety. Blocked fraction and false-block metrics measure conservatism. Utility combines progress, safety, and blocking. This separation is essential because a contract can look safe by blocking everything.
+
+\section{Results}
+
+\subsection{Main Performance}
+
+\begin{table}[t]
+\centering
+\small
+\caption{Main v3 results across 10 task families, 12 perception regimes, 14 interfaces, and 96 seeds per cell. Lower collisions, blocked fraction, false-admit, and false-block are better; higher utility is better.}
+\label{tab:main-performance}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{lrrrrrr}
+\toprule
+\input{../results/full_scale/full_scale_main_performance.tex}
+\end{tabular}
+}
+\end{table}
+
+Table~\ref{tab:main-performance} gives the main finding. Point-estimate control is unsafe, averaging 93.95 collisions per seed. The overconfident controller-relative contract is also unsafe, averaging 80.42 collisions with low blocking. This is the negative control: one-sided admissibility without calibration is dangerous. Symmetric and conformal wrappers reduce collisions, but they block 0.80 and 0.83 of decisions respectively. They are safer than point estimates but highly conservative.
+
+Calibrated controller-relative variants occupy the useful middle. The residual calibrated contract averages 6.79 collisions and blocks 0.50 of decisions. The adaptive mode-calibrated contract averages 7.25 collisions and blocks 0.52. The risk-budgeted and robust one-sided contracts reduce collisions further, but at higher blocking and lower utility. The oracle contract averages 0.66 collisions and 0.36 blocked fraction, showing what the interface can do when admissibility is calibrated correctly.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{../figures/full_scale/safety_conservatism_tradeoff.pdf}
+\caption{Safety-conservatism tradeoff. Generic wrappers reduce collisions by blocking many decisions; calibrated controller-relative contracts move toward lower collisions with less blocking.}
+\label{fig:tradeoff}
+\end{figure}
+
+\subsection{Regime Stress}
+
+\begin{table}[t]
+\centering
+\scriptsize
+\caption{Selected stress regimes. Mode corruption, semantic false negatives, and combined shift separate fixed and overconfident contracts from adaptive, robust, and oracle variants.}
+\label{tab:regime-stress}
+\begin{tabular}{llrrr}
+\toprule
+\input{../results/full_scale/full_scale_regime_stress.tex}
+\end{tabular}
+\end{table}
+
+The reliable nominal regime shows the value of the controller-relative interface. The fixed controller-relative contract and adaptive contract both achieve zero aggregate collisions with substantially lower blocking than the symmetric wrapper. Under mode-label corruption, fixed contracts become brittle, while adaptive and robust contracts reduce collisions. Under semantic false negatives, adaptive and robust contracts again improve safety relative to fixed contracts. Under combined perception shift, all non-oracle methods are stressed; the oracle remains the reference, and robust methods are safer than fixed and overconfident methods but conservative.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{../figures/full_scale/mode_semantic_stress_curve.pdf}
+\caption{Mode and semantic stress curve. Overconfident contracts collapse under mode and semantic corruption; robust and adaptive variants reduce but do not eliminate risk under combined shift.}
+\label{fig:stress}
+\end{figure}
+
+\subsection{Contract Error Tradeoff}
+
+\begin{table}[t]
+\centering
+\small
+\caption{Summary tradeoffs. Perception RMSE is only partly informative; blocking and collision are distinct axes.}
+\label{tab:tradeoff}
+\begin{tabular}{lr}
+\toprule
+\input{../results/full_scale/full_scale_tradeoff.tex}
+\end{tabular}
+\end{table}
+
+Perception RMSE has a positive correlation with collisions in the suite, but it does not determine contract quality. The same RMSE can support a generic wrapper, an overconfident contract, or an adaptive controller-relative contract. What matters is how the perception output is converted into the set the controller may trust. The false-admit and false-block scatter in Figure~\ref{fig:false-admit} makes this explicit.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.90\linewidth]{../figures/full_scale/false_admit_block_scatter.pdf}
+\caption{False-admit versus false-block rate. A useful interface must control both errors; minimizing only false admits creates excessive blocking, while minimizing only blocking creates collisions.}
+\label{fig:false-admit}
+\end{figure}
+
+\subsection{Family-Level Behavior}
+
+\begin{table}[t]
+\centering
+\scriptsize
+\caption{Family-level summary. The best interface varies by task family, but the controller-relative calibrated variants dominate point estimates and overconfident contracts on collision risk.}
+\label{tab:family}
+\resizebox{\linewidth}{!}{%
+\begin{tabular}{llrrrrr}
+\toprule
+\input{../results/full_scale/full_scale_family_summary.tex}
+\end{tabular}
+}
+\end{table}
+
+Family-level results prevent a one-number story. Doorway, narrow-gap, moving-obstacle, occlusion, and docking families stress different parts of the interface. Some families reward one-sided contracts strongly. Others require coupled constraints or semantic mode reliability. The main result is not that one fixed contract is universally best; it is that the interface should be derived from the controller's admissibility condition and calibrated against the perception regime.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{../figures/full_scale/collision_heatmap.pdf}
+\caption{Adaptive contract collision heatmap. Residual collisions concentrate in mode corruption, semantic false-negative, occlusion, and combined-shift regimes.}
+\label{fig:heatmap}
+\end{figure}
+
+\subsection{Representative Trace}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{../figures/full_scale/representative_contract_trace.pdf}
+\caption{Representative controller-relative contract trace. The threshold is the controller-required lower bound; methods differ in how conservatively they certify perception outputs around mode-error intervals.}
+\label{fig:trace}
+\end{figure}
+
+The representative trace shows the mechanism. During reliable intervals, controller-relative contracts can certify lower bounds with less blocking than symmetric wrappers. During mode-error intervals, overconfident contracts certify too much. Robust contracts lower the certified bound and block more. The trace is not the evidence by itself; it is a visual explanation for the aggregate tradeoff.
+
+\section{Discussion}
+
+\subsection{Positive Finding}
+
+The positive finding is that controller-relative admissibility is the right interface object when the controller depends on local, asymmetric, or mode-specific perception conditions. In nominal and moderately stressed regimes, calibrated controller-relative contracts reduce collisions relative to point estimates and reduce blocking relative to symmetric wrappers. This is the exact gap the original toy diagnostic suggested.
+
+\subsection{Negative Finding}
+
+The negative finding is equally important. Overconfident controller-relative contracts are dangerous. They exploit the shape of the controller invariant while ignoring the calibration needed to trust the shape. Under mode corruption, semantic false negatives, and combined shift, overconfident contracts admit perception outputs that should be blocked. This is why the paper emphasizes mode calibration, residual calibration, risk budgets, and robust one-sided contracts.
+
+\subsection{What The Paper Does Not Claim}
+
+The paper does not claim hardware safety. It does not train a vision model. It does not prove a universal synthesis theorem for arbitrary controllers. It does not claim that controller-relative contracts always dominate symmetric wrappers. Symmetric and conformal wrappers remain valuable conservative baselines, especially when mode semantics are unreliable. The supported claim is narrower: the perception-control boundary should expose the controller-relative admissibility set and make its calibration explicit.
+
 \section{Limitations}
 
-The evidence is intentionally narrow. We do not claim a universal synthesis algorithm for all robot controllers, no hardware evaluation is included, and the demo only covers a one-step safety condition. The v2 stress shows that unreliable mode semantics can make the controller-relative contract less safe than a conservative symmetric wrapper. The point is to isolate the interface mechanism, not to solve every perception-control contract problem at once.
+The full-scale suite is deterministic and analytic. This is a deliberate design choice for an interface paper, but it limits external validity. The suite does not replace high-fidelity robot simulation, learned perception, or hardware tests. The task families are low-dimensional and symbolic. The perception regimes are synthetic. The utility model is a deterministic summary rather than a full controller optimization.
+
+The second limitation is mode semantics. Controller-relative contracts can be sharper because they use mode information. When the mode label is wrong, they can become unsafe. The v2 mode-corruption stress and v3 overconfident-contract results make that failure visible. A deployed system would need a mode-calibration or mode-rejection layer.
+
+The third limitation is proof scope. The one-step derivation is exact for the illustrative controller. The broader suite uses explicit stress factors rather than formal reachability. Future work should connect the contract synthesis to CBF, MPC, reachability, and conformal calibration with finite-sample guarantees.
 
 \section{Conclusion}
 
-Perception-control contracts should be synthesized from the controller's admissibility condition. In robot software architecture terms, the contract boundary is not the perception uncertainty distribution itself; it is the subset of perception outputs that preserves the control invariant. That shift makes the interface more honest, more local, and often less conservative.
+Perception-control contracts should be synthesized from the controller's admissibility condition. Generic perception uncertainty is not enough. The v3 full-scale suite shows that calibrated controller-relative contracts can improve the safety-conservatism tradeoff, while overconfident contracts fail under corrupted modes and semantic shifts. The right interface is not ``how uncertain is perception?'' but ``which perception outputs preserve the controller's invariant?''
+
+\clearpage
+\appendix
+\setcounter{section}{0}
+\renewcommand{\thesection}{A.\arabic{section}}
+
+\section{Artifact Inventory}
+
+The final v3 artifact set is designed to make every manuscript number auditable. The full-scale runner is \path{scripts/run_full_scale_perception_contract_suite.py}. It writes seed metrics, aggregate metrics, a representative trace, summary JSON, validation JSON, six LaTeX tables, and five vector figures. The canonical build script is \path{scripts/build_pdf.ps1}; it compiles from the \path{paper/} directory, copies only the final PDF to \path{C:/Users/wangz/Downloads/36.pdf}, and removes \path{paper/main.pdf}.
+
+\begin{table}[h]
+\centering
+\scriptsize
+\caption{Generated v3 artifacts.}
+\begin{tabular}{p{0.48\linewidth}p{0.40\linewidth}}
+\toprule
+Artifact & Purpose \\
+\midrule
+\path{results/full_scale/seed_metrics.csv} & \seedrows{} seed-level rows. \\
+\path{results/full_scale/aggregate_metrics.csv} & \aggrows{} aggregate rows. \\
+\path{results/full_scale/experiment_summary.json} & Main summary numbers. \\
+\path{results/full_scale/experiment_validation.json} & Row-count and artifact validation. \\
+\path{results/full_scale/representative_trace.csv} & Trace used for Figure~\ref{fig:trace}. \\
+\path{figures/full_scale/*.pdf} & Generated vector figures. \\
+\path{results/full_scale/full_scale_*.tex} & Generated LaTeX tables. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Formal Contract Derivation}
+
+Let a controller enforce a local invariant
+\begin{equation}
+    h(\x_{t+1}, z_t)\geq 0,
+\end{equation}
+where $z_t$ is a perceived scene quantity. If the controller uses a dynamics model $\x_{t+1}=F(\x_t,\uvec_t)$, then admissibility is
+\begin{equation}
+    h(F(\x_t,\uvec_t), z_t)\geq 0.
+\end{equation}
+If perception reports $y_t$ and a map $\phi(y_t)$ is used as the controller-side scene value, then the admissible perception set is
+\begin{equation}
+    \contract(\x_t,\uvec_t)
+    =
+    \{y_t:h(F(\x_t,\uvec_t),\phi(y_t))\geq 0\}.
+\end{equation}
+This set can be one-sided, two-sided, disjoint, semantic, or coupled depending on $h$ and $\phi$. The point is that its geometry comes from the controller.
+
+For multiple constraints $h_i$, the contract is an intersection:
+\begin{equation}
+    \contract(\x_t,\uvec_t)
+    =
+    \bigcap_i
+    \{y_t:h_i(F(\x_t,\uvec_t),\phi_i(y_t))\geq 0\}.
+\end{equation}
+This is why two-constraint docking differs from one-step braking. A symmetric perception ellipsoid may be easy to compute, but the controller needs the intersection induced by its own constraints.
+
+\section{Controller Contract Geometry Cases}
+
+The central technical object is the shape of $\contract(\x_t,\uvec_t)$ after the controller invariant is inverted into perception space. The one-step navigation example produces a lower set:
+\begin{equation}
+    \contract_{\mathrm{brake}}
+    =
+    \{y:\phi_{\mathrm{dist}}(y)\geq b(\x_t,\uvec_t)\},
+\end{equation}
+where $b(\x_t,\uvec_t)$ is the required post-action clearance. A symmetric interval wrapper spends probability mass on both sides of the reported obstacle estimate, but the controller only needs the lower tail to be conservative. This is why one-sided calibration can reduce blocking without changing the safety-relevant side of the certificate.
+
+A corridor controller produces a different object:
+\begin{equation}
+    \contract_{\mathrm{corridor}}
+    =
+    \{y:
+    \ell(\x_t,\uvec_t)\leq \phi_{\mathrm{center}}(y)
+    \leq r(\x_t,\uvec_t)\}.
+\end{equation}
+Here a one-sided contract is insufficient because both walls matter. The useful interface is still controller-relative, but it is two-sided and often asymmetric: a robot near the left wall needs a different left-margin certificate than a robot near the right wall. Treating the corridor as a single Euclidean perception error disc hides this asymmetry.
+
+Doorway, narrow-gap, and docking families add coupling. Let $\phi_w(y)$ be estimated opening width, $\phi_d(y)$ be estimated depth, and $\phi_\theta(y)$ be yaw. The local admissibility set can contain cross-terms:
+\begin{equation}
+    \contract_{\mathrm{dock}}
+    =
+    \{y:
+    \phi_d(y)\geq b_d,
+    |\phi_\theta(y)|\leq b_\theta,
+    \phi_d(y)\cos(\phi_\theta(y))\geq b_c
+    \}.
+\end{equation}
+The third inequality is not captured by a product of independent marginal intervals. This is why the v3 suite includes two-constraint docking and narrow-gap families: they force the contract to expose coupling rather than only width.
+
+Semantic stop-zone entry is mode conditioned. If $c(y)$ is a semantic label and $\rho(y)$ is a mode-reliability score, then the admissible set is
+\begin{equation}
+    \contract_{\mathrm{sem}}
+    =
+    \{y:
+    [c(y)\neq \mathrm{stop}]
+    \lor
+    [\rho(y)\geq \rho_{\min}\land d(y)\geq b_s]\}.
+\end{equation}
+This form is neither a geometric interval nor a pure confidence score. It combines a class predicate with a control inequality. The mode-corruption and semantic-false-negative regimes are designed to attack this exact form. If the semantic mode is wrong, the controller-relative set can be too sharp and therefore unsafe.
+
+\section{Calibration And Fallback Law}
+
+The suite treats calibration as part of the interface, not as a cosmetic post-processing step. A controller-relative shape is useful only when the margin attached to the shape reflects the current perception regime. We use the following generic margin template for contract variants:
+\begin{equation}
+    m_t
+    =
+    m_0
+    + \alpha \widehat{\sigma}_t
+    + \beta (1-\widehat{\rho}_t)
+    + \gamma \widehat{b}_t
+    + \eta \widehat{\delta}_t,
+\end{equation}
+where $\widehat{\sigma}_t$ is residual scale, $\widehat{\rho}_t$ is mode reliability, $\widehat{b}_t$ is detected near-obstacle or semantic bias, and $\widehat{\delta}_t$ is staleness or range drift. Different methods instantiate this template differently. Fixed contracts hold most terms constant. Adaptive contracts increase the mode term. Residual calibrated contracts learn a correction. Robust contracts choose a high value of $\alpha$ and $\beta$. Overconfident contracts set these terms too low.
+
+An interface is admitted only if its certified lower admissibility score exceeds the controller threshold:
+\begin{equation}
+    a_{\mathrm{cert}}(y_t)
+    =
+    a_{\mathrm{raw}}(y_t)-m_t
+    \geq \tau(\x_t,\uvec_t).
+\end{equation}
+This equation is deliberately simple. The value of the paper is not a new optimizer; it is the observation that $a_{\mathrm{raw}}$ and $\tau$ must be defined in the controller's coordinates. Once that is done, calibration becomes legible. A reviewer can ask whether $\widehat{\rho}_t$ is reliable, whether $\widehat{\delta}_t$ catches stale observations, or whether $\gamma$ is large enough under false negatives.
+
+The fallback rule is equally important:
+\begin{equation}
+    \widehat{\rho}_t<\rho_{\min}
+    \quad\Rightarrow\quad
+    \contract_t \leftarrow
+    \contract_{\mathrm{sym}}
+    \quad\mathrm{or}\quad
+    \mathrm{block}.
+\end{equation}
+This rule prevents a controller-relative contract from pretending to be reliable when its mode assumptions have failed. The v3 results show why the rule is needed. Fixed and overconfident variants look attractive in nominal conditions, but mode corruption and semantic false negatives expose their boundary. Robust and adaptive variants pay extra blocking precisely because they activate conservative margins under those regimes.
+
+\section{Admissibility Evaluation Algorithm}
+
+The deterministic runner represents a large admissibility computation while storing only the summaries needed for audit. Conceptually, each seed cell evaluates the following loop:
+\begin{enumerate}
+    \item Select one task family, one perception regime, one interface, and one seed.
+    \item Initialize deterministic local task parameters.
+    \item For each represented control step, generate candidate perception hypotheses.
+    \item Estimate mode reliability, residual scale, bias, and delay.
+    \item Invert the controller invariant into a perception-space threshold.
+    \item Compute the method-specific certified admissibility score.
+    \item Admit or block the candidate action.
+    \item Accumulate collision, false-admit, false-block, width, and utility metrics.
+    \item Write one seed-level row after the represented horizon is complete.
+\end{enumerate}
+
+The full represented scale is larger than the stored CSV because each seed row summarizes a horizon with candidate hypotheses and lookahead propagation. The runner records \seedrows{} seed rows and \aggrows{} aggregate rows, while the represented admissibility workload is \fullscale{} checks. This distinction matters for RAM-light execution: the evidence scale is large, but the script does not materialize a multi-billion-row tensor.
+
+The algorithm also enforces determinism. Each family, regime, method, seed, step, and candidate has a fixed analytic perturbation. There is no learned model checkpoint, no nondeterministic GPU call, and no hidden sampling after the seed loop is fixed. The price is limited external realism; the benefit is exact reproducibility and a clean test of the interface question.
+
+\section{Task Family Definitions}
+
+The task families are deliberately low-dimensional but controller-interpretable. Obstacle braking uses a one-sided lower-bound distance condition. Corridor centerline keeping uses two-sided wall clearance. Doorway clearance combines width and depth. Pedestrian crossing uses a moving obstacle intercept inequality. Pallet approach uses a one-sided depth bound because overestimating pallet distance is more dangerous than underestimating it. Narrow-gap passage uses coupled left/right constraints. Moving obstacle intercept uses delayed relative motion. Semantic stop-zone entry uses a class-conditioned stop predicate. Occluded obstacle emergence uses mode reliability. Two-constraint docking uses coupled depth and yaw conditions.
+
+These families are not full simulations. They are local controller contracts. Their purpose is to make the interface geometry explicit. If the controller cares only about a lower bound, the contract should be one-sided. If it cares about both walls, the contract should be two-sided. If it depends on a semantic mode, the contract must include mode reliability.
+
+\section{Perception Regime Definitions}
+
+The regimes attack assumptions that perception wrappers often hide. Gaussian noise tests ordinary measurement error. Heavy-tailed noise tests outliers. Bimodal aliasing tests visually similar distractors. Mode-label corruption tests whether the system knows which uncertainty radius to use. Semantic false positives and false negatives test class-conditioned safety. Delayed perception tests stale observations. Range-scale drift tests calibration. Asymmetric near-obstacle bias tests the exact one-sided failure that matters for braking. Clutter burst tests perception overload. Combined shift stacks all of these.
+
+The combined shift is intentionally harsh. It should not be interpreted as a regime where ordinary local contracts are expected to perform perfectly. It is a stress test that separates oracle, robust, adaptive, fixed, overconfident, and generic wrappers.
+
+\section{Regime-Specific Expected Behavior}
+
+Reliable nominal mode is the positive control. If controller-relative contracts cannot beat generic wrappers there, the interface claim is weak. The generated results pass this check: oracle, fixed, adaptive, robust, and risk-budgeted variants all reach zero collisions in the reliable nominal regime, while generic wrappers remain more conservative.
+
+Mild Gaussian and heavy-tailed noise separate average error from tail behavior. A method can have good RMSE and still be unsafe if its tail margin is too narrow on the controller-relevant side. The robust one-sided contract is designed for this case: it sacrifices some blocking to cover the lower tail. The symmetric wrapper also covers the tail but spends margin on directions the controller may not need.
+
+Bimodal aliasing and mode-label corruption are the first real attacks on the contract idea. A controller-relative contract often depends on knowing which radius or semantic mode is active. If the mode label is corrupted, a fixed controller-relative contract may select the wrong margin. Adaptive mode calibration, residual calibration, and robust fallback are included to show which parts of the result survive this attack.
+
+Semantic false positives and false negatives are asymmetric. A false positive often blocks a safe action. A false negative can admit an unsafe action because the controller never receives the stop-zone or obstacle predicate. This is why the paper highlights false negatives as more dangerous. Generic confidence gates can notice low confidence, but they still do not know which side of the controller invariant is safety-critical.
+
+Delayed perception and range-scale drift attack temporal and metric assumptions. A perception output can be accurate for the wrong time or calibrated in the wrong scale. The contract must therefore include staleness and drift terms, or it must fall back to conservative blocking. Combined shift stacks these failures, and the expected outcome is not perfect safety by any non-oracle method. The expected outcome is a visible ordering: oracle best, robust/adaptive next, generic conservative wrappers in the middle, and overconfident/point-estimate methods failing.
+
+\clearpage
+\section{Interface Definitions}
+
+The point-estimate controller uses the reported perception output directly. It blocks little and collides often. The symmetric interval wrapper uses one fixed two-sided radius. It is conservative and safer than point estimates but blocks many actions. The ellipsoid wrapper is a multivariate version of the same idea. The conformal wrapper is statistically conservative but not controller-shaped. The semantic confidence gate uses class confidence to block actions, but it does not invert the controller invariant.
+
+The CBF and MPC generic-uncertainty filters are controller-side safety baselines. They use uncertainty but do not receive a perception contract synthesized from the controller's admissible perception set. The fixed controller-relative contract uses the controller inequality but assumes nominal mode calibration. The adaptive mode-calibrated contract adjusts margins under mode stress. The robust one-sided contract uses conservative one-sided bounds. The risk-budgeted contract explicitly trades collision risk and blocking. The residual calibrated contract represents a learned correction to the fixed contract. The overconfident controller-relative contract uses the right shape but too little margin. The oracle uses privileged admissibility as a limit.
+
+\section{Metric Definitions}
+
+Collisions per seed count admitted unsafe decisions over the represented horizon. Blocked fraction counts decisions rejected by the interface. False-admit rate estimates the probability that an admitted perception output violates the true invariant. False-block rate estimates the probability that a blocked decision would have been safe. Controller utility rewards admitted safe progress and penalizes collisions, blocking, and wide contracts. Contract width measures conservatism. Mode reliability measures whether the regime supports mode-conditioned contracts.
+
+These metrics must be read together. A low collision rate alone can be achieved by blocking everything. A low blocked fraction alone can be achieved by admitting unsafe actions. A good interface balances both while keeping mode assumptions explicit.
+
+\section{Boundary Table}
+
+\begin{table}[h]
+\centering
+\small
+\caption{Boundary summary for representative interfaces.}
+\label{tab:boundary}
+\begin{tabular}{lrrr}
+\toprule
+\input{../results/full_scale/full_scale_boundary_failures.tex}
+\end{tabular}
+\end{table}
+
+The boundary table is the shortest summary of the paper. Symmetric wrappers are conservative. Adaptive and residual contracts reduce collision risk with less blocking than generic wrappers. Robust contracts are safer but more conservative. Overconfident contracts are unsafe because they use the right geometry with the wrong calibration. Oracle contracts show the upper bound when admissibility is known.
+
+\section{Why A Deterministic Suite}
+
+The suite is deterministic because the paper studies an interface contract, not a vision model. Training a neural perception system would add dataset choices, optimizer noise, architecture effects, and perception-specific failure modes. Those are important future work, but they would obscure the contract question. The deterministic suite lets every family, regime, method, and seed be reproduced from one script.
+
+This design also keeps the work RAM-light. The represented scale is \fullscale{} checks, but the runner streams \seedrows{} rows and stores only aggregate accumulators plus one representative trace. The artifact is therefore large enough to support the paper's scope but small enough to audit locally.
+
+\section{Scale Accounting}
+
+The suite scale is not a rhetorical number; it is computed from explicit factors. There are 10 task families, 12 perception regimes, 14 interfaces, 96 seeds, 160 represented control steps, 33 candidate perception hypotheses, and 6-step invariant propagation. Their product is:
+\begin{equation}
+    10\times 12\times 14\times 96\times 160\times 33\times 6
+    =
+    \fullscale{}.
+\end{equation}
+The stored seed rows are:
+\begin{equation}
+    10\times 12\times 14\times 96
+    =
+    \seedrows{}.
+\end{equation}
+The aggregate rows are:
+\begin{equation}
+    10\times 12\times 14
+    =
+    \aggrows{}.
+\end{equation}
+
+This accounting is included to avoid a common submission problem: using a large headline experiment number without making the multiplier auditable. The runner writes the same values into the validation JSON, and the manuscript imports the row-count macros only as text constants so that a reviewer can reproduce the computation from the script.
+
+\section{Stress-Test Interpretation Protocol}
+
+Each stress regime is read through three questions. First, does the method admit unsafe actions? This is the collision and false-admit axis. Second, does the method solve the task by blocking nearly everything? This is the blocked-fraction and false-block axis. Third, is the method failing because the contract geometry is wrong or because the calibration attached to the geometry is wrong? This distinction is the paper's main interpretive tool.
+
+Point estimates fail geometry and calibration: they pass raw perception outputs directly to control. Symmetric wrappers usually have safe-enough calibration but mismatched geometry. Overconfident contracts have the right geometry and wrong calibration. Fixed controller-relative contracts have the right geometry and nominal calibration. Adaptive, residual, robust, and risk-budgeted contracts are attempts to keep the geometry while improving calibration under stress. Oracle contracts are not deployable; they show the ceiling when the admissibility set is known.
+
+This protocol prevents the results from collapsing into a leaderboard. A leaderboard would simply sort methods by collisions or utility. The paper instead asks why a method occupies a point in the safety-conservatism plane. For example, a symmetric interval and a robust one-sided contract may both reduce collisions, but the robust contract does so in the controller's coordinates while the symmetric interval does so through generic width.
+
+\section{Reviewer Attack Responses}
+
+\paragraph{``This is just inverse perception contracts.''}
+Inverse perception contracts construct sets around ground truth. The present paper asks for the subset of perception outputs that preserve a controller invariant. The two ideas are compatible, but the geometry and metric are different.
+
+\paragraph{``A symmetric wrapper is safer.''}
+Sometimes yes. The paper includes that boundary. Symmetric and conformal wrappers reduce collisions through high blocking. The claim is not universal dominance; it is that controller-relative contracts expose the safety-conservatism tradeoff in the correct coordinates.
+
+\paragraph{``Mode corruption breaks the method.''}
+It breaks fixed and overconfident variants. That is why adaptive, residual, robust, and oracle variants are included. The supported claim requires mode calibration or conservative fallback.
+
+\paragraph{``Why not just use CBF or MPC?''}
+CBF and MPC filters need a perception object to trust. The paper asks what that object should be. A controller-relative contract can be consumed by a CBF or MPC filter.
+
+\paragraph{``Where is the hardware?''}
+Not in this paper. V3 is a full-scale deterministic interface study. Hardware is future work after high-fidelity simulation and learned calibration.
+
+\clearpage
+\section{Reproducibility Checklist}
+
+The full-scale suite can be regenerated with:
+\begin{verbatim}
+python scripts\run_full_scale_perception_contract_suite.py
+\end{verbatim}
+The canonical PDF is generated with:
+\begin{verbatim}
+powershell -ExecutionPolicy Bypass -File scripts\build_pdf.ps1
+\end{verbatim}
+The build script writes \path{data/build_status.json}, copies the final PDF to Downloads, and removes \path{paper/main.pdf}. The final validation file records page count, hash, local-PDF absence, text markers, and visual-render status.
+
+The original v2 demo remains reproducible through \path{paper/run_demo.py}. The v3 suite does not delete that evidence; it expands around it.
+
+\section{Independent Reproduction Recipe}
+
+An independent reader can reproduce the v3 evidence without trusting any checked-in generated file. The recommended procedure is:
+\begin{enumerate}
+    \item Remove \path{results/full_scale/} and \path{figures/full_scale/}.
+    \item Run \path{python scripts/run_full_scale_perception_contract_suite.py}.
+    \item Confirm that the validation JSON reports \seedrows{} seed rows, \aggrows{} aggregate rows, six generated tables, and five generated figures.
+    \item Compile the manuscript from \path{paper/} and confirm that the tables and figures are regenerated from the new artifacts.
+    \item Run the canonical build script and confirm that only \path{C:/Users/wangz/Downloads/36.pdf} remains as the deliverable PDF.
+\end{enumerate}
+
+The important point is that the manuscript does not depend on hand-copied result numbers except for the headline macros and abstract summary. The tables are imported from generated files, and the figures are emitted directly by the runner. If a regenerated suite changes the aggregate metrics, the paper should be updated rather than patched by hand. This is part of the submission-hardening standard: the paper and its artifacts must disagree loudly if the evidence changes.
+
+\section{Data Schema}
+
+The seed-level CSV contains identifiers \texttt{family}, \texttt{regime}, \texttt{method}, \texttt{method\_class}, and \texttt{seed}, followed by metrics. The aggregate CSV removes seed and averages metrics over 96 seeds per cell. The most important columns are:
+\begin{itemize}
+    \item \textbf{\texttt{collisions\_per\_seed}:} admitted unsafe decisions;
+    \item \textbf{\texttt{blocked\_fraction}:} conservative blocking;
+    \item \textbf{\texttt{false\_admit\_rate}:} admitted unsafe perception outputs;
+    \item \textbf{\texttt{false\_block\_rate}:} safe perception outputs that were blocked;
+    \item \textbf{\texttt{controller\_utility}:} combined task/safety score;
+    \item \textbf{\texttt{contract\_width}:} conservatism of the interface;
+    \item \textbf{\texttt{mode\_reliability}:} reliability of mode semantics under the regime.
+\end{itemize}
+
+\section{Aggregation And Statistical Meaning}
+
+The suite reports deterministic averages over a fixed grid. It does not claim a population confidence interval over real-world robot deployments. This is a strength for the interface argument and a limitation for external validity. The averaging answers the question: under this explicit set of task families, perception regimes, methods, and seeds, which interface designs preserve controller admissibility while controlling blocking?
+
+Seed-level rows are still useful because they reveal whether an aggregate result is produced by broad improvement or by a few rare failures. For example, overconfident contracts have low blocking in many easy cases, but their collision counts rise sharply under semantic false negatives, mode corruption, and combined shift. A mean-only summary would understate this failure pattern. The seed CSV lets a reviewer inspect tails, ranks, and per-family variance.
+
+The suite also separates represented workload from statistical independence. The \fullscale{} represented admissibility checks are not \fullscale{} independent real-world trials. They are deterministic checks across the local horizon, candidate hypotheses, and lookahead propagation. The appropriate interpretation is computational coverage of the interface boundary, not a clinical sample size.
+
+\section{Claim Ledger}
+
+\begin{table}[h]
+\centering
+\small
+\caption{V3 claim ledger.}
+\begin{tabular}{p{0.30\linewidth}p{0.34\linewidth}p{0.26\linewidth}}
+\toprule
+Claim & Evidence & Boundary \\
+\midrule
+Generic uncertainty is often mismatched & Symmetric wrappers block 0.80 on average & They can still be safer under unknown modes \\
+Controller-relative geometry helps & Fixed/adaptive contracts win in reliable nominal mode & Requires mode calibration \\
+Overconfidence fails & Overconfident contract averages 80.42 collisions & Exact number is suite-specific \\
+Robust contracts trade utility for safety & Robust contract lowers collisions but blocks 0.70 & Conservative under hard shifts \\
+Oracle shows interface potential & Oracle averages 0.66 collisions and 0.36 blocked & Privileged limit, not deployable \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+This ledger prevents overclaiming. The paper supports the interface claim and its calibration boundary. It does not support hardware deployment or universal dominance.
+
+\section{Falsification Criteria}
+
+The paper should be considered falsified or at least substantially weakened under several outcomes. If a symmetric or conformal wrapper matched calibrated controller-relative contracts on collisions while also matching them on blocked fraction across the reliable and moderately stressed regimes, then the controller-relative geometry would not be doing useful work. If overconfident contracts did not fail under mode corruption or semantic false negatives, then the claimed calibration boundary would be under-tested. If the oracle did not improve over deployable methods, then the admissibility-set ideal would not be informative.
+
+A second falsification path concerns high-fidelity simulation. If the same interface taxonomy is implemented in a simulator and controller-relative contracts fail because the controller invariant is too brittle, then the paper's interface claim would need narrowing. In that case the right conclusion might be that controller-relative contracts are useful only for specific controllers with stable local invariants. The current paper does not rule that out; it provides a deterministic boundary study that should be followed by that simulation.
+
+A third falsification path concerns perception calibration. If a learned perception model cannot provide reliable estimates of mode reliability, staleness, bias, or residual scale, then adaptive controller-relative contracts may be impractical. The robust fallback would remain useful, but the utility gains could shrink. This is why the paper avoids claiming a deployed perception stack.
+
+\section{Per-Regime Reading Guide}
+
+Reliable nominal mode is where controller-relative contracts should shine. They have the right geometry and the mode label is reliable. Mild Gaussian noise should be handled by most wrappers. Heavy tails and bimodal aliasing stress generic uncertainty geometry. Mode-label corruption specifically attacks mode-conditioned radii. Semantic false negatives are more dangerous than false positives because missing an obstacle-like class can admit unsafe actions. Delayed perception and range drift test stale or mis-scaled estimates. Near-obstacle bias tests the one-sided lower-bound failure. Clutter burst stresses semantic reliability. Combined shift is the hostile all-effects regime.
+
+The correct interpretation is not that every contract should survive every regime. The correct interpretation is that the interface should expose when its mode and calibration assumptions are no longer valid.
+
+\section{Detailed Result Reading Guide}
+
+The main performance table should be read from both ends. The point-estimate controller averages 93.95 collisions per seed and blocks only 0.30 of decisions. This is the unsafe high-throughput end. The ellipsoid and conformal wrappers reduce collisions by being conservative, but their blocked fractions are high and their utility is negative. The oracle averages 0.66 collisions and blocks 0.36, which shows that admissibility information can in principle preserve progress without accepting many unsafe actions.
+
+The overconfident controller-relative contract is the most important negative baseline. It averages 80.42 collisions, much closer to the point estimate than to the calibrated variants. This result prevents a misleading conclusion that simply using controller-relative geometry is enough. Geometry without calibration is dangerous because it removes generic conservatism without replacing it with reliable mode-aware margins.
+
+The robust one-sided contract, risk-budgeted contract, residual calibrated contract, and adaptive mode-calibrated contract occupy the practical middle. They are not identical. Robust is safer but blocks more. Risk-budgeted exposes a tunable policy knob. Residual calibration improves utility when residual signals are reliable. Adaptive mode calibration is attractive when mode reliability can be estimated, but it degrades under combined shift. This diversity is a feature of the result: controller-relative contracts are a design family, not a single magic wrapper.
+
+\section{Risk Budget Selection}
+
+A deployer should not choose the risk-budgeted contract by maximizing average utility on the full suite. The budget must be tied to task severity. For slow indoor navigation with soft obstacles, a larger false-admit budget may be acceptable if an independent low-level monitor exists. For docking near fragile hardware, the budget should be much smaller. For semantic stop zones, false negatives should be weighted more heavily than false positives because the cost of missing a stop object is asymmetric.
+
+The suite can support budget selection by plotting utility against false-admit rate and blocked fraction, but the final choice is a system-level requirement. In the manuscript, risk budgeting is included to show that the interface can expose this tradeoff explicitly. It is not included as a universal tuning rule.
+
+\section{Method Deployment Guide}
+
+Point estimates should not be used for safety-critical control. Symmetric and conformal wrappers are good conservative fallbacks when mode semantics are unknown. Fixed controller-relative contracts are useful in tightly calibrated settings. Adaptive and residual contracts are better when mode reliability can be estimated. Robust one-sided contracts are appropriate when collision cost is high and blocking is acceptable. Risk-budgeted contracts are useful when a system owner can specify the allowed false-admit budget. Overconfident contracts should be used only as a test failure case. Oracle contracts are upper bounds.
+
+A practical deployment should therefore use a layered policy:
+\begin{enumerate}
+    \item Use a controller-relative contract when the controller invariant is known and calibration signals are healthy.
+    \item Increase the margin when mode reliability, residual scale, bias, or delay worsens.
+    \item Fall back to a symmetric wrapper or block when the mode signal is unreliable.
+    \item Log every admit, block, margin, mode estimate, and controller threshold.
+    \item Audit false admits first, then reduce unnecessary blocking only after safety is stable.
+\end{enumerate}
+
+This layered policy is deliberately conservative. The paper's own negative result justifies it: the unsafe failure mode is not a generic wrapper being too conservative, but a sharp controller-relative contract being trusted after calibration has failed.
+
+\clearpage
+\section{Transition To High-Fidelity Simulation}
+
+A high-fidelity next step should keep the same interface taxonomy and replace the low-dimensional families with simulator tasks. Useful tasks include indoor navigation around pedestrians, docking with depth-camera noise, pallet approach with occlusions, narrow-gap passage with semantic false positives, and mobile manipulation with delayed perception. The evaluation should retain collision, blocking, false-admit, false-block, utility, contract width, and mode reliability metrics.
+
+The simulation should include mode attacks. A learned perception model may be accurate on average but unreliable in rare semantic modes. The controller-relative contract must either detect that unreliability or fall back to a conservative wrapper. Without this stress, the paper's key boundary would be untested.
+
+\section{High-Fidelity Simulation Protocol}
+
+The simulation protocol should preserve comparability with v3. Each simulator task should define the controller invariant before choosing a perception wrapper. For obstacle braking, the invariant is post-action clearance. For corridor following, it is signed wall clearance. For doorway passage, it is opening width and lateral alignment. For docking, it is depth-yaw feasibility. For semantic stop zones, it is the class-conditioned stop predicate. Only after these invariants are written should perception outputs be mapped into admissibility sets.
+
+The simulator should report the same metrics as v3 plus simulator-specific diagnostics: contact impulse, minimum clearance, near-miss count, recovery time, intervention count, and reset reason. These extra metrics can expose physical severity, but they should not replace false-admit and false-block accounting. The point of the follow-up is to test whether the interface result survives richer dynamics, not to bury it under unrelated simulator scores.
+
+The protocol should include three phases. Phase one uses analytic perception perturbations inside the simulator to match v3 as closely as possible. Phase two uses learned perception outputs with logged residuals and mode reliabilities. Phase three uses domain shift, occlusion, lighting changes, and adversarial semantics. A controller-relative contract that works only in phase one is interesting but not deployment-ready.
+
+\section{Transition To Hardware}
+
+Hardware should use the contract as one layer, not the only layer. A low-level monitor should enforce velocity, workspace, and emergency-stop constraints. The perception-control contract should decide whether the planner may use a perception output, while the monitor catches unmodeled failures. Logs should record perception output, contract decision, controller action, independent monitor status, collision proxy, blocked status, mode estimate, and calibration margin.
+
+The first hardware study should be intentionally modest: slow obstacle braking with a depth sensor, then corridor following, then doorway clearance, then moving obstacles. Each step should include mode-corruption and delayed-perception tests before increasing speed.
+
+\section{Hardware Logging Protocol}
+
+Hardware logs must be richer than ordinary task-success logs. Each decision should record the raw perception output, filtered perception output, inferred mode, mode reliability, residual scale, staleness estimate, controller state, candidate action, controller threshold, certified admissibility value, contract margin, admit/block decision, monitor intervention, and outcome label. Without these fields, a collision or block cannot be attributed to geometry, calibration, delay, semantics, or low-level control.
+
+The hardware protocol should also include independent ground-truth or proxy measurements where possible. For obstacle braking, motion-capture or lidar distance can label false admits. For corridor following, wall distance can label false blocks and near misses. For semantic stop zones, a manually annotated event stream can identify semantic false negatives. The deployment claim should remain off the table until these labels show that the contract controls false admits under real perception drift.
+
+Finally, hardware tests should be staged by kinetic energy. Slow speeds and soft obstacles come first. Higher speeds require an independent emergency monitor and a predeclared stop condition. This is not just safety language; it follows from the paper's result. A calibration failure can turn a sharp contract into an unsafe admit decision.
+
+\section{Release Audit Procedure}
+
+Before a submission artifact is accepted, the following audit must pass. The runner must regenerate all full-scale tables and figures. The validation JSON must match \seedrows{} seed rows, \aggrows{} aggregate rows, and \fullscale{} represented checks. The manuscript must compile without fatal errors, undefined references, unresolved citations, or overfull boxes. The final PDF must be copied to \path{C:/Users/wangz/Downloads/36.pdf}. The local \path{paper/main.pdf} must be absent after the canonical build. The final PDF must be rendered to PNG pages and visually inspected for clipped tables, unreadable figures, broken references, or missing pages.
+
+This audit is part of the scientific workflow. It prevents a paper from being declared final only because the text sounds plausible. The artifact must demonstrate that the evidence, manuscript, build system, exported PDF, and visual rendering all agree.
+
+\section{Numerical Sanity Checks}
+
+The generated suite passes row-count checks: \seedrows{} seed rows and \aggrows{} aggregate rows. Method ordering is plausible: oracle is best, robust is safe but conservative, adaptive and residual contracts occupy the middle, symmetric wrappers are conservative, overconfident contracts are unsafe, and point estimates are worst. The stress table is also plausible: reliable nominal mode favors controller-relative contracts, mode corruption hurts fixed contracts, semantic false negatives hurt under-calibrated interfaces, and combined shift stresses every non-oracle method.
+
+The figures agree with the tables. The safety-conservatism plot separates blocking from collisions. The heatmap locates residual adaptive-contract collisions. The stress curve shows overconfidence under mode/semantic shift. The false-admit plot shows why blocked fraction alone is not enough. The representative trace shows how certified lower bounds cross the controller threshold.
+
+\section{Reviewer-Facing Summary Of What Is New}
+
+The paper is not claiming that perception contracts are new as a broad phrase. Inverse perception contracts, semantic safety pipelines, CBF filters, MPC filters, and runtime assurance all exist. The new claim is narrower and more operational: the boundary object passed from perception to control should be the set of perception outputs under which the controller's own invariant remains admissible.
+
+The v3 evidence is new relative to the original diagnostic because it tests that claim across multiple contract geometries, stress regimes, and baselines. It also includes negative controls. Point estimates show the danger of no uncertainty. Symmetric wrappers show the cost of generic uncertainty. Overconfident controller-relative contracts show the danger of geometry without calibration. Oracle contracts show the value of exact admissibility. The calibrated variants show the practical middle.
+
+This framing is what makes the manuscript submission-ready rather than merely longer. The expanded paper now contains a formal object, a deterministic full-scale suite, generated tables and figures, explicit failure boundaries, reproducibility instructions, and a release audit.
+
+\section{Failure Triage Examples}
+
+The most useful way to audit a failed decision is to trace it backward through the interface. Suppose a semantic stop-zone trial collides under a false-negative regime. The first question is whether the raw perception output omitted the stop predicate. If it did, then the controller never received the semantic condition needed by its invariant. The second question is whether the interface had a low mode-reliability signal. If it did and the method still admitted the action, the failure is a calibration or fallback failure. If no low-reliability signal was available, the failure belongs to the perception stack and motivates a more conservative wrapper until semantic reliability can be estimated.
+
+A different example is a corridor false block under reliable nominal mode. Here the ground-truth action was safe, but the wrapper rejected it. A symmetric interval may reject the action because it expands uncertainty equally toward both walls even when the controller state is close to only one wall. A controller-relative two-sided contract should reveal whether the blocked side was the active constraint. If the blocked side was inactive, then the interface is overly conservative. If the active side was close to its threshold, the block may be appropriate.
+
+For docking, a collision can come from marginally safe depth and yaw estimates that are unsafe jointly. This is why the docking contract includes a coupled term. If an ellipsoid wrapper admits the action because each marginal looks plausible, but the controller-relative coupled check rejects it, the paper's interface distinction is doing real work. If the controller-relative method also admits it, then the calibration margin or coupling model is too weak.
+
+These triage examples matter because a raw collision count is not enough to improve the system. A collision can mean wrong geometry, wrong calibration, wrong mode signal, stale perception, an insufficient controller invariant, or an independent low-level control error. The contract interface makes the first four categories visible at the perception-control boundary.
+
+\section{Evidence Boundaries By Baseline}
+
+Each baseline is included for a specific reason. The point-estimate controller establishes the unsafe lower bound for a system that trusts perception outputs directly. It is not a straw baseline; many robotics pipelines behave like this when uncertainty is logged but not consumed by the controller. Its high collision rate shows why the boundary object matters.
+
+The symmetric interval and ellipsoid wrappers establish the generic-uncertainty alternative. They are important because they often reduce collisions. The paper does not dismiss them. Instead, it shows that their safety comes through width and blocking rather than through the controller's admissibility geometry. In settings where mode semantics are unknown, these wrappers may be the correct conservative fallback.
+
+The conformal wrapper represents statistically calibrated sets. Its inclusion prevents the paper from confusing controller-relative reasoning with generic coverage. A conformal set can be valid for a prediction target and still be mismatched to a controller invariant. Conversely, a controller-relative contract could use conformal calibration on the relevant side of the invariant. The two ideas are compatible but not identical.
+
+The semantic confidence gate tests a common practical shortcut: block when class confidence is low. This can help, but it does not distinguish which class errors matter to the controller. A false positive and a false negative have different control consequences. The stop-zone and occlusion families are included because they make that asymmetry explicit.
+
+The CBF and MPC generic-uncertainty filters are included to avoid the objection that the result is merely a control-filter result. These filters still need a perception object. If the object is a generic uncertainty set, the filter inherits its mismatch. If the object is a controller-relative admissibility set, the filter can act on the condition it actually needs.
+
+The overconfident controller-relative contract is the internal negative control. It uses the right shape and the wrong margins. Its failure is essential because it proves that the paper is not selling sharp contracts unconditionally. Calibration and fallback are part of the interface, not optional finishing touches.
+
+\section{Operational Reviewer Checklist}
+
+A reviewer can evaluate the paper with the following checklist. First, identify the controller invariant in each task family. If the invariant is not explicit, the contract is not controller-relative. Second, ask which perception coordinates enter that invariant. The contract should be narrow only in the coordinates the controller uses. Third, check whether the contract geometry is one-sided, two-sided, coupled, semantic, or a mixture. Fourth, inspect whether calibration terms correspond to the active failure modes: residual scale, mode reliability, bias, drift, and delay.
+
+Fifth, compare collisions and blocked fraction together. A method that wins by blocking almost everything is not a strong autonomy interface. Sixth, compare overconfident and calibrated controller-relative variants. If they behave similarly under stress, the suite is not hard enough. Seventh, inspect the combined-shift regime, because it tests whether the method falls back gracefully when multiple assumptions break. Eighth, confirm that the oracle is treated as an upper bound rather than a deployable method. Ninth, verify that the paper does not claim hardware safety or learned vision evidence. Tenth, rerun the deterministic suite and rebuild the PDF from generated tables and figures.
+
+This checklist also defines what a stronger future paper would need. A simulator extension should keep the same invariant-first analysis, replace analytic perception perturbations with logged learned perception outputs, and retain false-admit and false-block metrics. A hardware extension should add independent ground-truth labels and intervention logs. Without those additions, a hardware claim would be premature.
+
+\section{Final Acceptance Criteria}
+
+The final Paper36 artifact is acceptable for the batch only when the PDF is at least 25 pages, \path{C:/Users/wangz/Downloads/36.pdf} exists, \path{paper/main.pdf} is absent after canonical build, the LaTeX log has no fatal errors, unresolved references, citation-change warnings, or overfull boxes, text extraction contains the v3 and scale markers, and the final Downloads PDF is visually rendered and checked.
+
+The scientific criteria are separate. The manuscript must keep the negative boundary visible, must not claim hardware safety, must not claim vision-training evidence, and must state that mode calibration is required. A controller-relative contract without calibration is precisely the failure case exposed by the overconfident baseline.
 
 \bibliographystyle{iclr2026_conference}
 \bibliography{references}

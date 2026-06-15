@@ -1,27 +1,21 @@
 # Novelty Decision
 
-## Chosen thesis
+## Chosen Thesis
 
-Perception-control contracts should be synthesized relative to the downstream controller's invariant and mode structure, not as a controller-agnostic uncertainty set around perception outputs.
+Perception-control contracts should be synthesized relative to the downstream controller's admissibility condition and mode structure, not as controller-agnostic uncertainty sets around perception outputs.
 
-## Central mechanism
+## Central Mechanism
 
-Given a controller safety condition, derive the admissible set of perception outputs that preserves that condition under the controller's local model. Use that set as the contract interface.
+Given a controller invariant, invert the local control condition into perception-output space and pass the resulting admissible set across the perception-control boundary.
 
-## Why this is the strongest idea
+## Why This Is The Strongest Idea
 
-- It changes the central mechanism, not just the model size or data volume.
-- It is adjacent to, but not covered by, existing IPC and semantic-CBF papers.
-- It exposes hidden assumptions: unimodal errors, static modes, controller-agnostic uncertainty, and perfect alignment between perception timestamps and control invariants.
-- It can be supported with a small runnable simulation and a hostile comparison against the single-ellipsoid contract default.
+- It changes the boundary object, not merely the size of the perception set.
+- It is adjacent to inverse perception contracts but uses the downstream controller's admissibility condition as the synthesis target.
+- It explains why one-sided braking, two-sided corridor keeping, coupled docking, and semantic stop-zone control need different perception interfaces.
+- It exposes calibration and mode reliability as part of the contract rather than as afterthoughts.
+- It supports both positive and negative findings in a full-scale deterministic suite.
 
-## Rejected alternatives
+## V3 Boundary
 
-- Generic uncertainty-aware navigation
-- Pure runtime verification of software contracts
-- Better perception calibration
-- New benchmark only
-
-## V2 hardening boundary
-
-The paper remains a narrow mechanism paper. It is not a general safe-perception theorem. The v2 mode-corruption stress deliberately weakens the claim: at 20% mode-label error, the controller-relative contract's collision rate rises to 0.020, worse than the symmetric wrapper's 0.014. The honest novelty boundary is controller-relative synthesis under reliable local mode semantics.
+The paper is not a hardware or learned-vision claim. It is a deterministic interface study with 5,109,350,400 represented admissibility checks. The honest novelty boundary is controller-relative admissibility with explicit calibration and fallback requirements.
