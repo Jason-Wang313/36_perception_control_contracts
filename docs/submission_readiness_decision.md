@@ -1,24 +1,23 @@
 # Submission Readiness Decision
 
-Decision: workshop-only / strong-revise.
+Decision: final v3 deterministic submission artifact for the batch.
 
 ## Rationale
 
-The paper has a coherent mechanism, clear hostile-prior boundary, reproducible toy evidence, and an explicit negative stress test. It is not submit-ready for a full venue because it lacks hardware validation, multiple tasks, multiple seeds with uncertainty intervals, and a general proof.
+The paper now has a coherent mechanism, formal controller-relative contract definition, full-scale deterministic evidence, hostile baselines, negative controls, generated tables and figures, and a verified 25-page canonical PDF. It is still not a hardware or learned-vision deployment claim.
 
 ## Allowed Claim
 
-In a one-step navigation simulator with reliable perception mode semantics, controller-relative admissibility reduces blocked actions while preserving safety relative to the tested symmetric wrapper.
+Across the v3 deterministic suite, calibrated controller-relative admissibility contracts improve the safety-conservatism tradeoff relative to point estimates and expose when generic wrappers or conservative fallback are preferable.
 
 ## Disallowed Claim
 
-Controller-relative contracts are universally safer than conservative symmetric uncertainty wrappers. The v2 mode-corruption stress falsifies that claim under corrupted mode labels.
+Controller-relative contracts are universally safer than conservative wrappers. Overconfident controller-relative contracts fail under mode and semantic shift, and hardware safety is not tested.
 
-## Next Work Needed For Full Submission
+## Final Artifact
 
-- Multi-seed confidence intervals.
-- More than one controller family.
-- A mode-calibration or mode-rejection mechanism.
-- Hardware or high-fidelity simulator validation.
-- Formal conditions under which controller-relative admissibility implies safety.
-
+- PDF: `C:/Users/wangz/Downloads/36.pdf`
+- Pages: 25
+- SHA256: `73AFE97FDFD6D1B598646BA6413F1AD6699F8FBED5FE276C9308D12EE60626DF`
+- Build status: complete
+- Visual render: checked
