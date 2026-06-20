@@ -47,7 +47,8 @@ Perception-control contracts should be synthesized relative to the downstream co
 ## Artifact Policy
 
 - Canonical PDF path: `C:/Users/wangz/Downloads/36.pdf`
-- SHA256: `73AFE97FDFD6D1B598646BA6413F1AD6699F8FBED5FE276C9308D12EE60626DF`
+- SHA256: `F9CD804DFC345B0111BEB680CF0B0E9BD78C5C20D5A2D4D61AFD2FAF85FBB8D1`
 - Page count: 25
 - Local tracked/generated paper PDF: removed after canonical build.
 - Visible Desktop copy: intentionally absent.
+- VLA-style link-box check: passed on pages 2, 5, 11, and 25 with 21 green citation/URL boxes, 3 red internal-reference boxes, and 24 visible one-point borders.

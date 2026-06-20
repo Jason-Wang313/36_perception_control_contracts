@@ -11,8 +11,10 @@
 - [x] Generated vector figures: `figures/full_scale/*.pdf`
 - [x] Canonical build command: `powershell -ExecutionPolicy Bypass -File scripts/build_pdf.ps1`
 - [x] Canonical PDF path: `C:/Users/wangz/Downloads/36.pdf`
+- [x] Canonical PDF SHA256: `F9CD804DFC345B0111BEB680CF0B0E9BD78C5C20D5A2D4D61AFD2FAF85FBB8D1`
 - [x] Local generated PDF removed after build.
 - [x] Final Downloads PDF rendered and visually checked.
+- [x] VLA-style link-box QA passed on pages 2, 5, 11, and 25.
 - [x] Final PDF metadata recorded in `results/full_scale/validation.json`.
 - [ ] Fully pinned Python environment.
 - [ ] Continuous integration.
