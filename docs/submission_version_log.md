@@ -24,4 +24,10 @@
 - Rewrote `paper/main.tex` into a 25-page final full-scale manuscript.
 - Added controller contract geometry, calibration/fallback law, admissibility algorithm, regime interpretation, falsification criteria, high-fidelity simulation protocol, hardware logging protocol, release audit, and reviewer checklist appendices.
 - Canonical final PDF: `C:/Users/wangz/Downloads/36.pdf`.
-- Final SHA256: `73AFE97FDFD6D1B598646BA6413F1AD6699F8FBED5FE276C9308D12EE60626DF`.
+- Final SHA256: `F9CD804DFC345B0111BEB680CF0B0E9BD78C5C20D5A2D4D61AFD2FAF85FBB8D1`.
+
+## v3 visual hardening
+
+- Rebuilt the same 25-page manuscript with VLA-style red/green link boxes.
+- Converted final-page URL boxes from cyan to the VLA-v4 green treatment.
+- Verified affected pages 2, 5, 11, and 25 by PNG render.
